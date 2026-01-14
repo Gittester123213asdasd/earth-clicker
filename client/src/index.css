@@ -57,10 +57,10 @@
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+  /* Remove the * rule entirely */
   body {
     @apply bg-background text-foreground antialiased;
+  }
+}
   }
 }
