@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Tell Tailwind to look in these specific folders for styles */
+@source "./**/*.{js,ts,jsx,tsx,html}";
+@source "../../shared/**/*.{js,ts,jsx,tsx}";
+
+@theme inline {
+  /* ... keep all your existing theme code here ... */
+}
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
