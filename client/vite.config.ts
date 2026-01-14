@@ -1,12 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite"; // Add this line
+import tailwindcss from "@tailwindcss/vite"; // <--- Add this
 import path from "path";
 
 export default defineConfig({
   plugins: [
     react(),
-    tailwindcss(), // Add this line
+    tailwindcss(), // <--- Add this
   ],
   resolve: {
     alias: {
@@ -16,5 +16,5 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-  }
+  },
 });
