@@ -1,13 +1,12 @@
 import { createNextApiHandler } from '@trpc/server/adapters/next';
-import { appRouter } from '../../server/trpc/routers.js';
-import { createContext } from '../../server/server_core/context.js';
+// We point to the .ts files. Vercel's builder handles the conversion.
+import { appRouter } from '../../server/trpc/routers'; 
+import { createContext } from '../../server/server_core/context'; 
 
 export default createNextApiHandler({
   router: appRouter,
   createContext,
   onError({ error }) {
-    if (error.code === 'INTERNAL_SERVER_ERROR') {
-      console.error('TRPC Server Error:', error);
-    }
+    console.error('TRPC Error:', error);
   },
 });
