@@ -155,7 +155,7 @@ export default function Home() {
             onClick={handleClick} 
             className="relative w-72 h-72 md:w-[450px] md:h-[450px] rounded-full flex items-center justify-center"
           >
-            <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-[100px] group-hover:bg-blue-400/30 transition-all duration-500" />
+            <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-[50px] group-hover:bg-blue-400/30 transition-all duration-500" />
             <img 
               src="/images/earth.png" 
               alt="Earth" 
