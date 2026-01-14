@@ -149,7 +149,11 @@ export function MapView({
     init();
   }, [init]);
 
-  return (
-    <div ref={mapContainer} className={cn("w-full h-[500px]", className)} />
-  );
+ return (
+  <div 
+    ref={mapContainer} 
+    className={cn("w-full h-[500px] bg-transparent border-none outline-none", className)} 
+    style={{ backgroundColor: 'transparent' }} 
+  />
+);
 }
