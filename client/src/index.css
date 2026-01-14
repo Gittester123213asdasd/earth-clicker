@@ -64,3 +64,4 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+img { background-color: red !important; }
