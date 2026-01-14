@@ -1,22 +1,22 @@
-import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
-import type { User } from "../../drizzle/schema.sqlite";
+import type { CreateNextContextOptions } from "@trpc/server/adapters/next";
 import { sdk } from "./sdk";
 
+// We keep the type flexible so it doesn't crash if the SQLite file is missing
 export type TrpcContext = {
-  req: CreateExpressContextOptions["req"];
-  res: CreateExpressContextOptions["res"];
-  user: User | null;
+  req: any;
+  res: any;
+  user: any;
 };
 
 export async function createContext(
-  opts: CreateExpressContextOptions
+  opts: CreateNextContextOptions
 ): Promise<TrpcContext> {
-  let user: User | null = null;
+  let user = null;
 
   try {
+    // This still uses your Manus SDK to check who is clicking
     user = await sdk.authenticateRequest(opts.req);
   } catch (error) {
-    // Authentication is optional for public procedures.
     user = null;
   }
 
