@@ -7,12 +7,12 @@ export default defineConfig({
   // This tells Vite the project starts at the root where index.html is
   root: "./", 
   build: {
-    outDir: "dist/public",
-    emptyOutDir: false,
+    outDir: "dist", // Simplified for Vercel
+    emptyOutDir: true, // Clean the folder before building
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./client/src"),
+      "@": path.resolve(__dirname, "./src"), // Fixed: removed /client
     },
   },
 });
