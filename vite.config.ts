@@ -4,15 +4,17 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
-  // This tells Vite the project starts at the root where index.html is
   root: "./", 
   build: {
-    outDir: "dist", // Simplified for Vercel
-    emptyOutDir: true, // Clean the folder before building
+    outDir: "dist",
+    emptyOutDir: true,
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"), // Fixed: removed /client
+      // Points to your frontend src
+      "@": path.resolve(__dirname, "./src"),
+      // Points to your shared folder (verify this path matches your folder structure)
+      "@shared": path.resolve(__dirname, "./shared"), 
     },
   },
 });
