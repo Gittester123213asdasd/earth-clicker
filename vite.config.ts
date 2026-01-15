@@ -4,15 +4,19 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
-  // This tells Vite the index.html is in the same folder as this config file
-  root: process.cwd(), 
+  // This tells Vite that while the config is in root, 
+  // the project logic is inside the 'client' folder.
+  root: path.resolve(__dirname), 
   resolve: {
     alias: {
-      "@": path.resolve(process.cwd(), "./client/src"),
+      "@": path.resolve(__dirname, "./client/src"),
     },
   },
   build: {
     outDir: "dist/public",
-    emptyOutDir: false, // Prevents Vite from deleting the server build
+    emptyOutDir: false, // Important: prevents Vite from deleting your server build
+    rollupOptions: {
+      input: path.resolve(__dirname, "index.html"),
+    },
   },
 });
