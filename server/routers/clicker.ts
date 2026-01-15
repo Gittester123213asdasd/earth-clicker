@@ -1,6 +1,6 @@
+// server/trpc/routers/clicker.ts
 import { z } from "zod";
 import { publicProcedure, router } from "../_core/trpc";
-// We only import the functions that exist in our new db.ts
 import {
   getGlobalCounter,
   getCountryLeaderboard,
@@ -8,73 +8,42 @@ import {
   getOnlineUserCount,
 } from "../db";
 
-const RATE_LIMIT_WINDOW = 1000;
-const RATE_LIMIT_MAX_CLICKS = 20; 
-const recentClicks: Map<string, number[]> = new Map();
-
-// Rate limit based on IP since we don't have logins
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const userClicks = recentClicks.get(ip) || [];
-  const recentUserClicks = userClicks.filter((time) => now - time < RATE_LIMIT_WINDOW);
-  
-  if (recentUserClicks.length >= RATE_LIMIT_MAX_CLICKS) return false;
-  
-  recentUserClicks.push(now);
-  recentClicks.set(ip, recentUserClicks);
-  return true;
-}
-
 export const clickerRouter = router({
+  // 1. Get Global Total
   getGlobalCounter: publicProcedure.query(async () => {
     const counter = await getGlobalCounter();
     return counter?.totalClicks || 0;
   }),
 
-  getOnlineUsers: publicProcedure.query(async () => {
-    return await getOnlineUserCount();
+  // 2. Submit Batch (The Cost-Saver)
+  submitClickBatch: publicProcedure
+    .input(z.object({ count: z.number().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // We pass the batch total to the DB
+        await incrementAll(ctx.req, input.count);
+        return { success: true };
+      } catch (error) {
+        console.error("Batch Update Failed:", error);
+        throw new Error("Could not sync clicks");
+      }
+    }),
+
+  // 3. Leaderboard (Cached for 30s to save money)
+  getLeaderboard: publicProcedure.query(async ({ ctx }) => {
+    if (ctx.res) {
+      // Prevents the DB from being hit more than twice a minute
+      ctx.res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate');
+    }
+    const leaderboard = await getCountryLeaderboard();
+    return leaderboard.map((item: any, index: number) => ({
+      rank: index + 1,
+      countryCode: item.country || "UN",
+      totalClicks: item.totalClicks || 0,
+    }));
   }),
 
-  submitClick: publicProcedure
-    .mutation(async ({ ctx }) => {
-      // Get IP from the request context
-      const ip = (ctx.req.headers["x-forwarded-for"] as string) || "127.0.0.1";
-
-      if (!checkRateLimit(ip)) {
-        throw new Error("Whoa! Slow down a bit.");
-      }
-
-      try {
-        // This one function now handles Global + User + Country + IP tracing
-        await incrementAll(ctx.req);
-
-        return {
-          success: true
-        };
-      } catch (error) {
-        console.error("Error submitting click:", error);
-        throw new Error("Failed to submit click");
-      }
-    }),
-
-  getLeaderboard: publicProcedure
-    .input(z.object({ limit: z.number().min(1).max(100).default(10) }))
-    .query(async () => {
-      const leaderboard = await getCountryLeaderboard();
-      return leaderboard.map((item: any, index: number) => ({
-        rank: index + 1,
-        countryCode: item.country || "UN",
-        totalClicks: item.totalClicks || 0,
-      }));
-    }),
-
-  // Simplified stats for guests
-  getUserStats: publicProcedure.query(async ({ ctx }) => {
-    const ip = (ctx.req.headers["x-forwarded-for"] as string) || "127.0.0.1";
-    // You can add a getUserByOpenId(ip) call here if you want to show personal clicks
-    return {
-      totalClicks: 0, 
-      country: ctx.req.headers["x-vercel-ip-country"] || "UN",
-    };
+  getOnlineUsers: publicProcedure.query(async () => {
+    return await getOnlineUserCount();
   }),
 });
