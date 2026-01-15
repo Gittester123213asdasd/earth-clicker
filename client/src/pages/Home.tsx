@@ -5,7 +5,6 @@ import { Twitter, Facebook } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
-// Helper to get ANY country name from a 2-letter code automatically
 const getCountryName = (code: string) => {
   try {
     const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -31,6 +30,9 @@ export default function Home() {
   const [onlineUsers, setOnlineUsers] = useState<number>(1);
   const [clickEffects, setClickEffects] = useState<{ id: number; x: number; y: number }[]>([]);
 
+  // NEW: THE BATCH BUFFER
+  const [clickBuffer, setClickBuffer] = useState<number>(0);
+
   // Detect Country on Load
   useEffect(() => {
     fetch('https://ipapi.co/json/')
@@ -41,16 +43,17 @@ export default function Home() {
       .catch(() => console.log("Geo-lookup blocked, defaulting to US"));
   }, []);
 
-  // Sync Logic - Refetch interval lowered to 500ms for "Real Time" feel
-  const { data: globalCounterData } = trpc.clicker.getGlobalCounter.useQuery(undefined, { refetchInterval: 500 });
-  const { data: leaderboardData } = trpc.clicker.getLeaderboard.useQuery({ limit: 10 }, { refetchInterval: 2000 });
-  const { data: userStatsData } = trpc.clicker.getUserStats.useQuery(undefined, { refetchInterval: 3000 });
-  const { data: userRankData } = trpc.clicker.getUserCountryRank.useQuery(undefined, { refetchInterval: 5000 });
-  const { data: onlineUsersData } = trpc.clicker.getOnlineUsers.useQuery(undefined, { refetchInterval: 5000 });
+  // Sync Logic - Optimized intervals to save costs
+  const { data: globalCounterData } = trpc.clicker.getGlobalCounter.useQuery(undefined, { refetchInterval: 5000 });
+  const { data: leaderboardData } = trpc.clicker.getLeaderboard.useQuery(undefined, { refetchInterval: 30000 });
+  const { data: userStatsData } = trpc.clicker.getUserStats.useQuery(undefined, { refetchInterval: 30000 });
+  const { data: userRankData } = trpc.clicker.getUserCountryRank.useQuery(undefined, { refetchInterval: 60000 });
+  const { data: onlineUsersData } = trpc.clicker.getOnlineUsers.useQuery(undefined, { refetchInterval: 10000 });
 
-  const submitClickMutation = trpc.clicker.submitClick.useMutation({
-    onSuccess: (data) => {
-      if (data.detectedCountry) setUserCountry(data.detectedCountry);
+  // Use the NEW batch mutation
+  const submitBatchMutation = trpc.clicker.submitClickBatch.useMutation({
+    onSuccess: () => {
+      toast.success("Clicks synced to World!", { duration: 1000 });
     },
   });
 
@@ -70,17 +73,37 @@ export default function Home() {
     if (countryData) setCountryTotalClicks(countryData.totalClicks);
   }, [leaderboard, userCountry]);
 
+  // NEW: 30-SECOND TIMER LOGIC
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Use functional update to ensure we get the latest buffer value
+      setClickBuffer((current) => {
+        if (current > 0) {
+          console.log(`[Timer] Sending ${current} clicks to database...`);
+          submitBatchMutation.mutate({ count: current });
+          return 0; // Clear the buffer after sending
+        }
+        return 0;
+      });
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [submitBatchMutation]);
+
   const handleClick = (e: React.MouseEvent) => {
+    // 1. Update UI immediately (Optimistic UI)
     setGlobalClicks(prev => prev + 1);
     setUserClicks(prev => prev + 1);
     setCountryTotalClicks(prev => prev + 1);
+    
+    // 2. Add to our Batch Buffer (DOES NOT call the server yet)
+    setClickBuffer(prev => prev + 1);
 
     const newEffect = { id: Date.now(), x: e.clientX, y: e.clientY };
     setClickEffects(prev => [...prev, newEffect]);
     setTimeout(() => setClickEffects(prev => prev.filter(eff => eff.id !== newEffect.id)), 800);
 
     playClickSound();
-    submitClickMutation.mutate({ country: userCountry });
   };
 
   const playClickSound = () => {
@@ -89,7 +112,7 @@ export default function Home() {
     const gainNode = audioContext.createGain();
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
-    oscillator.frequency.value = 600 + (Math.random() * 200); // Varied pitch
+    oscillator.frequency.value = 600 + (Math.random() * 200);
     oscillator.type = "sine";
     gainNode.gain.setValueAtTime(0.05, audioContext.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
@@ -116,6 +139,13 @@ export default function Home() {
         <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
         <span className="text-xs font-black tracking-wider text-white uppercase">{onlineUsers} Online</span>
       </div>
+
+      {/* Sync Status Badge (NEW) */}
+      {clickBuffer > 0 && (
+        <div className="absolute bottom-8 left-8 z-20 flex items-center gap-2 bg-blue-500/10 backdrop-blur-md px-4 py-2 rounded-full border border-blue-400/20">
+          <span className="text-[10px] font-black tracking-wider text-blue-400 uppercase">Saving in 30s: {clickBuffer} clicks</span>
+        </div>
+      )}
 
       {/* Share Icons */}
       <div className="absolute top-8 right-8 z-20 flex items-center gap-4">
