@@ -56,19 +56,18 @@ export default function Home() {
   useEffect(() => { if (userRankData) setUserRank(userRankData.rank); }, [userRankData]);
   useEffect(() => { if (onlineUsersData !== undefined) setOnlineUsers(onlineUsersData); }, [onlineUsersData]);
 
-  // Update Country Total from leaderboard data
   useEffect(() => {
     const countryData = leaderboard.find(c => c.countryCode === userCountry);
     if (countryData) setCountryTotalClicks(countryData.totalClicks);
   }, [leaderboard, userCountry]);
 
-  // 4. THE 30-SECOND TIMER (THE COST SAVER)
+  // 4. THE 30-SECOND TIMER
   useEffect(() => {
     const interval = setInterval(() => {
       setClickBuffer((current) => {
         if (current > 0) {
           submitBatchMutation.mutate({ count: current });
-          return 0; // Clear buffer after sending
+          return 0;
         }
         return 0;
       });
@@ -77,15 +76,11 @@ export default function Home() {
   }, []);
 
   const handleClick = (e: React.MouseEvent) => {
-    // Optimistic UI updates
     setGlobalClicks(prev => prev + 1);
     setUserClicks(prev => prev + 1);
     setCountryTotalClicks(prev => prev + 1);
-    
-    // Add to buffer for the next 30s sync
     setClickBuffer(prev => prev + 1);
 
-    // Visual Effect
     const newEffect = { id: Date.now(), x: e.clientX, y: e.clientY };
     setClickEffects(prev => [...prev, newEffect]);
     setTimeout(() => setClickEffects(prev => prev.filter(eff => eff.id !== newEffect.id)), 800);
@@ -98,7 +93,7 @@ export default function Home() {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
-      oscillator.connect(gainNode);
+       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
       oscillator.frequency.value = 600 + (Math.random() * 200);
       oscillator.type = "sine";
@@ -106,7 +101,7 @@ export default function Home() {
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.1);
-    } catch (e) { /* Audio blocked by browser */ }
+    } catch (e) { }
   };
 
   const share = (platform: string) => {
