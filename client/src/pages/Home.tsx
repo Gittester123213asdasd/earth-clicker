@@ -1,6 +1,5 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Twitter, Facebook } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,39 +23,28 @@ export default function Home() {
   const [globalClicks, setGlobalClicks] = useState<number>(0);
   const [userClicks, setUserClicks] = useState<number>(0);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
-  const [userCountry, setUserCountry] = useState<string>("US");
+  const [userCountry, setUserCountry] = useState<string>("UN");
   const [userRank, setUserRank] = useState<number | null>(null);
   const [countryTotalClicks, setCountryTotalClicks] = useState<number>(0);
   const [onlineUsers, setOnlineUsers] = useState<number>(1);
   const [clickEffects, setClickEffects] = useState<{ id: number; x: number; y: number }[]>([]);
-
-  // NEW: THE BATCH BUFFER
   const [clickBuffer, setClickBuffer] = useState<number>(0);
 
-  // Detect Country on Load
-  useEffect(() => {
-    fetch('https://ipapi.co/json/')
-      .then(res => res.json())
-      .then(data => {
-        if (data.country_code) setUserCountry(data.country_code);
-      })
-      .catch(() => console.log("Geo-lookup blocked, defaulting to US"));
-  }, []);
-
-  // Sync Logic - Optimized intervals to save costs
+  // 1. Data Queries
   const { data: globalCounterData } = trpc.clicker.getGlobalCounter.useQuery(undefined, { refetchInterval: 5000 });
   const { data: leaderboardData } = trpc.clicker.getLeaderboard.useQuery(undefined, { refetchInterval: 30000 });
   const { data: userStatsData } = trpc.clicker.getUserStats.useQuery(undefined, { refetchInterval: 30000 });
   const { data: userRankData } = trpc.clicker.getUserCountryRank.useQuery(undefined, { refetchInterval: 60000 });
   const { data: onlineUsersData } = trpc.clicker.getOnlineUsers.useQuery(undefined, { refetchInterval: 10000 });
 
-  // Use the NEW batch mutation
+  // 2. Batch Mutation
   const submitBatchMutation = trpc.clicker.submitClickBatch.useMutation({
     onSuccess: () => {
-      toast.success("Clicks synced to World!", { duration: 1000 });
+      toast.success("Clicks synced with Earth!", { duration: 1500 });
     },
   });
 
+  // 3. Sync State with Query Data
   useEffect(() => { if (globalCounterData !== undefined) setGlobalClicks(globalCounterData); }, [globalCounterData]);
   useEffect(() => { if (leaderboardData) setLeaderboard(leaderboardData); }, [leaderboardData]);
   useEffect(() => {
@@ -68,37 +56,36 @@ export default function Home() {
   useEffect(() => { if (userRankData) setUserRank(userRankData.rank); }, [userRankData]);
   useEffect(() => { if (onlineUsersData !== undefined) setOnlineUsers(onlineUsersData); }, [onlineUsersData]);
 
+  // Update Country Total from leaderboard data
   useEffect(() => {
     const countryData = leaderboard.find(c => c.countryCode === userCountry);
     if (countryData) setCountryTotalClicks(countryData.totalClicks);
   }, [leaderboard, userCountry]);
 
-  // NEW: 30-SECOND TIMER LOGIC
+  // 4. THE 30-SECOND TIMER (THE COST SAVER)
   useEffect(() => {
     const interval = setInterval(() => {
-      // Use functional update to ensure we get the latest buffer value
       setClickBuffer((current) => {
         if (current > 0) {
-          console.log(`[Timer] Sending ${current} clicks to database...`);
           submitBatchMutation.mutate({ count: current });
-          return 0; // Clear the buffer after sending
+          return 0; // Clear buffer after sending
         }
         return 0;
       });
-    }, 30000); // 30 seconds
-
+    }, 30000); 
     return () => clearInterval(interval);
-  }, [submitBatchMutation]);
+  }, []);
 
   const handleClick = (e: React.MouseEvent) => {
-    // 1. Update UI immediately (Optimistic UI)
+    // Optimistic UI updates
     setGlobalClicks(prev => prev + 1);
     setUserClicks(prev => prev + 1);
     setCountryTotalClicks(prev => prev + 1);
     
-    // 2. Add to our Batch Buffer (DOES NOT call the server yet)
+    // Add to buffer for the next 30s sync
     setClickBuffer(prev => prev + 1);
 
+    // Visual Effect
     const newEffect = { id: Date.now(), x: e.clientX, y: e.clientY };
     setClickEffects(prev => [...prev, newEffect]);
     setTimeout(() => setClickEffects(prev => prev.filter(eff => eff.id !== newEffect.id)), 800);
@@ -107,21 +94,23 @@ export default function Home() {
   };
 
   const playClickSound = () => {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    oscillator.frequency.value = 600 + (Math.random() * 200);
-    oscillator.type = "sine";
-    gainNode.gain.setValueAtTime(0.05, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.1);
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.frequency.value = 600 + (Math.random() * 200);
+      oscillator.type = "sine";
+      gainNode.gain.setValueAtTime(0.05, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.1);
+    } catch (e) { /* Audio blocked by browser */ }
   };
 
   const share = (platform: string) => {
-    const text = `I contributed ${userClicks} clicks to help ${getCountryName(userCountry)} rank #${userRank || '?'}! 🌍 Join the Global Clicker: `;
+    const text = `I contributed ${userClicks} clicks to help ${getCountryName(userCountry)}! 🌍 Join the Global Clicker: `;
     const url = window.location.href;
     let shareUrl = "";
     if (platform === "twitter") shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
@@ -140,25 +129,23 @@ export default function Home() {
         <span className="text-xs font-black tracking-wider text-white uppercase">{onlineUsers} Online</span>
       </div>
 
-      {/* Sync Status Badge (NEW) */}
+      {/* Sync Status Badge */}
       {clickBuffer > 0 && (
         <div className="absolute bottom-8 left-8 z-20 flex items-center gap-2 bg-blue-500/10 backdrop-blur-md px-4 py-2 rounded-full border border-blue-400/20">
-          <span className="text-[10px] font-black tracking-wider text-blue-400 uppercase">Saving in 30s: {clickBuffer} clicks</span>
+          <span className="text-[10px] font-black tracking-wider text-blue-400 uppercase">Buffer: {clickBuffer} clicks (Sync in 30s)</span>
         </div>
       )}
 
-      {/* Share Icons */}
+      {/* Socials */}
       <div className="absolute top-8 right-8 z-20 flex items-center gap-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => share('twitter')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><Twitter className="w-4 h-4" /></button>
-          <button onClick={() => share('reddit')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><RedditIcon /></button>
-          <button onClick={() => share('facebook')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><Facebook className="w-4 h-4" /></button>
-        </div>
+        <button onClick={() => share('twitter')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><Twitter className="w-4 h-4" /></button>
+        <button onClick={() => share('reddit')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><RedditIcon /></button>
+        <button onClick={() => share('facebook')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><Facebook className="w-4 h-4" /></button>
       </div>
 
       {/* Leaderboard */}
       <div className="absolute top-24 left-8 z-20 hidden lg:block w-72">
-        <h2 className="text-lg font-black uppercase tracking-[0.3em] text-blue-400 mb-6 drop-shadow-[0_0_10px_rgba(96,165,250,0.3)]">Leaderboard</h2>
+        <h2 className="text-lg font-black uppercase tracking-[0.3em] text-blue-400 mb-6">Leaderboard</h2>
         <div className="space-y-4">
           {leaderboard.map((country, index) => (
             <motion.div layout key={country.countryCode} className="flex items-center gap-3 group">
@@ -170,64 +157,68 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Main Counter & Earth */}
+      {/* Main Counter */}
       <div className="flex flex-col items-center justify-center min-h-screen p-4 relative z-10">
-        <motion.div className="mb-12 text-center">
-          <span className="text-lg font-black uppercase tracking-[0.5em] text-blue-400 mb-4 block">World Contribution</span>
+        <div className="mb-12 text-center">
+          <span className="text-lg font-black uppercase tracking-[0.5em] text-blue-400 mb-4 block">Global Clicks</span>
           <h1 className="text-7xl md:text-9xl font-black tracking-tighter tabular-nums text-white drop-shadow-[0_0_30px_rgba(59,130,246,0.5)]">
             {globalClicks.toLocaleString()}
           </h1>
-        </motion.div>
+        </div>
 
+        {/* Earth Button */}
         <div className="relative group">
           <motion.button 
-            whileTap={{ scale: 0.95 }} 
+            whileTap={{ scale: 0.92 }} 
             onClick={handleClick} 
-            className="relative w-72 h-72 md:w-[450px] md:h-[450px] rounded-full flex items-center justify-center"
+            className="relative w-72 h-72 md:w-[450px] md:h-[450px] rounded-full flex items-center justify-center transition-all"
           >
-            <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-[50px] group-hover:bg-blue-400/30 transition-all duration-500" />
+            <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-[60px] group-hover:bg-blue-400/30 transition-all" />
             <img 
               src="/images/earth.png" 
               alt="Earth" 
-              className="w-full h-full object-contain relative z-10 transition-transform duration-500"
-              style={{ transform: `rotate(${globalClicks * 0.5}deg)` }}
+              className="w-full h-full object-contain relative z-10"
+              style={{ transform: `rotate(${globalClicks * 0.2}deg)` }}
             />
-            <div className="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              <span className="text-8xl font-black tracking-[0.2em] text-white drop-shadow-[0_0_20px_black] ml-[0.2em]">TAP</span>
-            </div>
           </motion.button>
 
           <AnimatePresence>
             {clickEffects.map(effect => (
               <motion.span
                 key={effect.id}
-                initial={{ opacity: 1, scale: 0 }}
-                animate={{ opacity: 0, scale: 4 }}
-                style={{ left: effect.x - 10, top: effect.y - 10 }}
-                className="fixed w-4 h-4 bg-blue-400 rounded-full pointer-events-none z-50"
-              />
+                initial={{ opacity: 1, y: effect.y, scale: 0.5 }}
+                animate={{ opacity: 0, y: effect.y - 100, scale: 2 }}
+                style={{ left: effect.x }}
+                className="fixed font-black text-blue-400 pointer-events-none z-50 text-2xl"
+              >
+                +1
+              </motion.span>
             ))}
           </AnimatePresence>
         </div>
 
-        {/* Stats Bottom */}
+        {/* Stats Section */}
         <div className="mt-16 text-center">
           <div className="flex flex-col items-center gap-8">
             <div className="flex gap-12 md:gap-24">
-              <div className="flex flex-col items-center">
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 mb-2">Your Clicks</span>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase text-white/40 mb-2">My Clicks</span>
                 <span className="text-4xl md:text-5xl font-black text-blue-400">{userClicks.toLocaleString()}</span>
               </div>
-              <div className="flex flex-col items-center">
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 mb-2">{getCountryName(userCountry)} Total</span>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase text-white/40 mb-2">{getCountryName(userCountry)} Total</span>
                 <span className="text-4xl md:text-5xl font-black text-white">{countryTotalClicks.toLocaleString()}</span>
               </div>
             </div>
             
-            <div className="flex items-center gap-4 px-10 py-4 bg-white/5 backdrop-blur-xl rounded-full border border-white/10">
-              <span className="text-base font-black tracking-[0.2em] uppercase text-white">{getCountryName(userCountry)}</span>
-              <div className="w-px h-5 bg-white/20" />
-              {userRank && <span className="text-base font-black text-blue-400">RANK #{userRank}</span>}
+            <div className="flex items-center gap-4 px-8 py-3 bg-white/5 backdrop-blur-xl rounded-full border border-white/10">
+              <span className="text-sm font-black tracking-widest uppercase text-white">{getCountryName(userCountry)}</span>
+              {userRank && (
+                <>
+                  <div className="w-px h-4 bg-white/20" />
+                  <span className="text-sm font-black text-blue-400">RANK #{userRank}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
