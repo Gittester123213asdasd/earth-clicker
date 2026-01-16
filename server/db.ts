@@ -25,16 +25,19 @@ export const db = drizzle(client, { schema: { users, globalStats } });
 // --- SDK COMPATIBILITY FUNCTIONS ---
 
 export async function getUserByOpenId(openId: string | null) {
+  // If openId is null, we return null to satisfy sdk.ts(278,7)
   if (!openId) return null;
   const result = await db.select().from(users).where(eq(users.openId, openId));
   return result[0] || null;
 }
 
+// Added 'email' and 'name' as optional to satisfy sdk.ts(262,11)
 export async function upsertUser(data: { 
   openId: string; 
   country: string; 
   totalClicks: number; 
-  name?: string | null 
+  name?: string | null;
+  email?: string | null;
 }) {
   return await db.insert(users)
     .values({
@@ -77,7 +80,8 @@ export async function incrementAll(req: any, amount: number = 1) {
         set: { totalClicks: sql`global_stats.total_clicks + ${amount}`, updatedAt: new Date() }
       });
 
-    await upsertUser({ openId: ip, country, totalClicks: amount });
+    // Ensure we pass a string for openId
+    await upsertUser({ openId: String(ip), country, totalClicks: amount });
   } catch (e) {
     console.error("DB Error:", e);
     throw e;
@@ -95,7 +99,6 @@ export async function getCountryLeaderboard() {
     .orderBy(desc(sql`sum(${users.totalClicks})`))
     .limit(10);
     
-    // Ensure we return an array even if empty
     return result || [];
   } catch (e) { return []; }
 }
