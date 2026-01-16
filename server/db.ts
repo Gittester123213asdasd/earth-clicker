@@ -3,12 +3,12 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { pgTable, serial, text, integer, timestamp } from 'drizzle-orm/pg-core';
 import { eq, desc, sql } from 'drizzle-orm';
 
-// 1. Table Definitions (Matching SQL underscores exactly)
+// Table Definitions
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   openId: text('open_id').unique(),
   name: text('name').default('Guest'),
-  totalClicks: integer('total_clicks').default(0), // Maps 'total_clicks' in SQL to 'totalClicks' in JS
+  totalClicks: integer('total_clicks').default(0),
   country: text('country').default('UN'),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -19,18 +19,15 @@ export const globalStats = pgTable('global_stats', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// 2. Database Connection
 const client = neon(process.env.DATABASE_URL!);
 export const db = drizzle(client, { schema: { users, globalStats } });
 
-// 3. Visitor Info Helper
 function getVisitorInfo(req: any) {
   const ip = req?.headers?.['x-forwarded-for']?.split(',')[0] || '127.0.0.1';
   const country = req?.headers?.['x-vercel-ip-country'] || 'UN';
   return { ip, country };
 }
 
-// 4. Database Functions
 export async function getGlobalCounter() {
   try {
     const result = await db.select().from(globalStats).where(eq(globalStats.id, 1));
@@ -42,8 +39,8 @@ export async function getGlobalCounter() {
 
 export async function incrementAll(req: any, amount: number = 1) {
   const { ip, country } = getVisitorInfo(req);
-
   try {
+    // 1. Update Global Stats
     await db.insert(globalStats)
       .values({ id: 1, totalClicks: amount })
       .onConflictDoUpdate({
@@ -54,12 +51,9 @@ export async function incrementAll(req: any, amount: number = 1) {
         }
       });
 
+    // 2. Update User Stats
     await db.insert(users)
-      .values({ 
-        openId: ip, 
-        country: country, 
-        totalClicks: amount 
-      })
+      .values({ openId: ip, country: country, totalClicks: amount })
       .onConflictDoUpdate({
         target: users.openId,
         set: { 
@@ -68,7 +62,7 @@ export async function incrementAll(req: any, amount: number = 1) {
         }
       });
   } catch (e) {
-    console.error("Increment error:", e);
+    console.error("DB Error:", e);
     throw e;
   }
 }
