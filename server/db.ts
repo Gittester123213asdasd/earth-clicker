@@ -24,14 +24,18 @@ export const db = drizzle(client, { schema: { users, globalStats } });
 
 // --- SDK COMPATIBILITY FUNCTIONS ---
 
-export async function getUserByOpenId(openId: string) {
+export async function getUserByOpenId(openId: string | null) {
   if (!openId) return null;
   const result = await db.select().from(users).where(eq(users.openId, openId));
   return result[0] || null;
 }
 
-// Added 'name' here because your sdk.ts (line 261) is trying to send it
-export async function upsertUser(data: { openId: string; country: string; totalClicks: number; name?: string }) {
+export async function upsertUser(data: { 
+  openId: string; 
+  country: string; 
+  totalClicks: number; 
+  name?: string | null 
+}) {
   return await db.insert(users)
     .values({
       openId: data.openId,
@@ -51,9 +55,9 @@ export async function upsertUser(data: { openId: string; country: string; totalC
 // --- MAIN FUNCTIONS ---
 
 function getVisitorInfo(req: any) {
-  const ip = req?.headers?.['x-forwarded-for']?.split(',')[0] || '127.0.0.1';
-  const country = req?.headers?.['x-vercel-ip-country'] || 'UN';
-  return { ip: ip as string, country: country as string }; // Force string type for SDK
+  const ip = (req?.headers?.['x-forwarded-for'] as string)?.split(',')[0] || '127.0.0.1';
+  const country = (req?.headers?.['x-vercel-ip-country'] as string) || 'UN';
+  return { ip, country };
 }
 
 export async function getGlobalCounter() {
@@ -82,7 +86,7 @@ export async function incrementAll(req: any, amount: number = 1) {
 
 export async function getCountryLeaderboard() {
   try {
-    return await db.select({
+    const result = await db.select({
       countryCode: users.country,
       totalClicks: sql<number>`CAST(sum(${users.totalClicks}) AS INTEGER)`,
     })
@@ -90,6 +94,9 @@ export async function getCountryLeaderboard() {
     .groupBy(users.country)
     .orderBy(desc(sql`sum(${users.totalClicks})`))
     .limit(10);
+    
+    // Ensure we return an array even if empty
+    return result || [];
   } catch (e) { return []; }
 }
 
