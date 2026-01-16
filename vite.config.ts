@@ -1,9 +1,13 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    tailwindcss(),
+  ],
   root: "./", 
   build: {
     outDir: "dist",
@@ -11,9 +15,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      // Points to your frontend src
       "@": path.resolve(__dirname, "./src"),
-      // Points to your shared folder (verify this path matches your folder structure)
       "@shared": path.resolve(__dirname, "./shared"), 
     },
   },
