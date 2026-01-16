@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Twitter, Facebook } from "lucide-react";
 import { toast } from "sonner";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 const getCountryName = (code: string) => {
   try {
@@ -28,23 +28,21 @@ export default function Home() {
   const [countryTotalClicks, setCountryTotalClicks] = useState<number>(0);
   const [onlineUsers, setOnlineUsers] = useState<number>(1);
   const [clickBuffer, setClickBuffer] = useState<number>(0);
-  const [clickEffects, setClickEffects] = useState<{ id: number; x: number; y: number }[]>([]);
 
-  // QUERIES
+  // Queries
   const { data: globalCounterData } = trpc.clicker.getGlobalCounter.useQuery(undefined, { refetchInterval: 5000 });
   const { data: leaderboardData } = trpc.clicker.getLeaderboard.useQuery(undefined, { refetchInterval: 30000 });
   const { data: userStatsData } = trpc.clicker.getUserStats.useQuery(undefined, { refetchInterval: 30000 });
   const { data: userRankData } = trpc.clicker.getUserCountryRank.useQuery(undefined, { refetchInterval: 60000 });
   const { data: onlineUsersData } = trpc.clicker.getOnlineUsers.useQuery(undefined, { refetchInterval: 10000 });
 
-  // MUTATION
+  // Mutation
   const submitBatchMutation = trpc.clicker.submitClickBatch.useMutation({
     onSuccess: () => {
-      toast.success("Synced with Earth!");
+      toast.success("Syncing clicks...", { duration: 1000 });
     },
     onError: (err) => {
-      console.error("Mutation failed:", err);
-      toast.error("Failed to sync clicks");
+      console.error("[DB Sync Error]", err);
     }
   });
 
@@ -64,28 +62,26 @@ export default function Home() {
     if (countryData) setCountryTotalClicks(countryData.totalClicks);
   }, [leaderboard, userCountry]);
 
-  // SYNC LOOP
+  // DB SYNC LOOP: Checks the buffer every 5 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      if (clickBuffer > 0) {
-        console.log(`Syncing ${clickBuffer} clicks...`);
-        submitBatchMutation.mutate({ count: clickBuffer });
-        setClickBuffer(0);
-      }
+      setClickBuffer((current) => {
+        if (current > 0) {
+          console.log(`[Database] Saving ${current} clicks...`);
+          submitBatchMutation.mutate({ count: current });
+          return 0;
+        }
+        return current;
+      });
     }, 5000); 
     return () => clearInterval(interval);
-  }, [clickBuffer]);
+  }, []);
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = () => {
     setGlobalClicks(prev => prev + 1);
     setUserClicks(prev => prev + 1);
     setCountryTotalClicks(prev => prev + 1);
     setClickBuffer(prev => prev + 1);
-
-    const newEffect = { id: Date.now(), x: e.clientX, y: e.clientY };
-    setClickEffects(prev => [...prev, newEffect]);
-    setTimeout(() => setClickEffects(prev => prev.filter(eff => eff.id !== newEffect.id)), 800);
-    
     playClickSound();
   };
 
@@ -105,19 +101,51 @@ export default function Home() {
     } catch (e) { }
   };
 
+  const share = (platform: string) => {
+    const text = `I contributed ${userClicks} clicks to help ${getCountryName(userCountry)}! 🌍 Join the Global Clicker: `;
+    const url = window.location.href;
+    let shareUrl = "";
+    if (platform === "twitter") shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+    if (platform === "reddit") shareUrl = `https://www.reddit.com/submit?title=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+    if (platform === "facebook") shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+    window.open(shareUrl, "_blank");
+  };
+
   return (
     <div className="min-h-screen bg-[#0a192f] text-white font-sans selection:bg-blue-500/30 overflow-hidden relative">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(23,37,84,1)_0%,rgba(10,25,47,1)_100%)]" />
 
+      {/* Online Counter Overlay */}
       <div className="absolute top-8 left-8 z-20 flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/20">
         <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
         <span className="text-xs font-black tracking-wider text-white uppercase">{onlineUsers} Online</span>
       </div>
 
+      {/* Share Buttons Overlay */}
+      <div className="absolute top-8 right-8 z-20 flex items-center gap-4">
+        <button onClick={() => share('twitter')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><Twitter className="w-4 h-4" /></button>
+        <button onClick={() => share('reddit')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><RedditIcon /></button>
+        <button onClick={() => share('facebook')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><Facebook className="w-4 h-4" /></button>
+      </div>
+
+      {/* Leaderboard Sidebar */}
+      <div className="absolute top-24 left-8 z-20 hidden lg:block w-72">
+        <h2 className="text-lg font-black uppercase tracking-[0.3em] text-blue-400 mb-6">Leaderboard</h2>
+        <div className="space-y-4">
+          {leaderboard.map((country, index) => (
+            <div key={country.countryCode} className="flex items-center gap-3 group">
+              <span className="text-xs font-mono text-white/40 w-5">{index + 1}</span>
+              <span className="text-lg font-bold text-white">{getCountryName(country.countryCode)}</span>
+              <span className="text-base font-mono text-blue-400 ml-auto tabular-nums font-black">{country.totalClicks.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="flex flex-col items-center justify-center min-h-screen p-4 relative z-10">
         <div className="mb-12 text-center">
           <span className="text-lg font-black uppercase tracking-[0.5em] text-blue-400 mb-4 block">Global Clicks</span>
-          <h1 className="text-7xl md:text-9xl font-black tracking-tighter tabular-nums text-white">
+          <h1 className="text-7xl md:text-9xl font-black tracking-tighter tabular-nums text-white drop-shadow-[0_0_30px_rgba(59,130,246,0.3)]">
             {globalClicks.toLocaleString()}
           </h1>
         </div>
@@ -125,25 +153,16 @@ export default function Home() {
         <motion.button 
           whileTap={{ scale: 0.92 }} 
           onClick={handleClick} 
-          className="relative w-72 h-72 md:w-[450px] md:h-[450px] rounded-full flex items-center justify-center"
+          className="relative w-72 h-72 md:w-[450px] md:h-[450px] rounded-full flex items-center justify-center transition-all"
         >
           <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-[60px]" />
-          <img src="/images/earth.png" alt="Earth" className="w-full h-full object-contain relative z-10" />
+          <img 
+            src="/images/earth.png" 
+            alt="Earth" 
+            className="w-full h-full object-contain relative z-10"
+            style={{ transform: `rotate(${globalClicks * 0.1}deg)` }}
+          />
         </motion.button>
-
-        <AnimatePresence>
-            {clickEffects.map(effect => (
-              <motion.span
-                key={effect.id}
-                initial={{ opacity: 1, y: effect.y, scale: 0.5 }}
-                animate={{ opacity: 0, y: effect.y - 100, scale: 2 }}
-                style={{ left: effect.x }}
-                className="fixed font-black text-blue-400 pointer-events-none z-50 text-2xl"
-              >
-                +1
-              </motion.span>
-            ))}
-          </AnimatePresence>
 
         <div className="mt-16 text-center">
           <div className="flex flex-col items-center gap-8">
@@ -156,6 +175,16 @@ export default function Home() {
                 <span className="text-[10px] font-black uppercase text-white/40 mb-2">{getCountryName(userCountry)} Total</span>
                 <span className="text-4xl md:text-5xl font-black text-white">{countryTotalClicks.toLocaleString()}</span>
               </div>
+            </div>
+            
+            <div className="flex items-center gap-4 px-8 py-3 bg-white/5 backdrop-blur-xl rounded-full border border-white/10">
+              <span className="text-sm font-black tracking-widest uppercase text-white">{getCountryName(userCountry)}</span>
+              {userRank && (
+                <>
+                  <div className="w-px h-4 bg-white/20" />
+                  <span className="text-sm font-black text-blue-400">RANK #{userRank}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
