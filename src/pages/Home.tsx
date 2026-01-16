@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { Twitter, Facebook } from "lucide-react";
+import { Twitter, Facebook, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -28,22 +28,22 @@ export default function Home() {
   const [countryTotalClicks, setCountryTotalClicks] = useState<number>(0);
   const [onlineUsers, setOnlineUsers] = useState<number>(1);
   const [clickBuffer, setClickBuffer] = useState<number>(0);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  // Queries
+  // tRPC Hooks
   const { data: globalCounterData } = trpc.clicker.getGlobalCounter.useQuery(undefined, { refetchInterval: 5000 });
-  const { data: leaderboardData } = trpc.clicker.getLeaderboard.useQuery(undefined, { refetchInterval: 30000 });
-  const { data: userStatsData } = trpc.clicker.getUserStats.useQuery(undefined, { refetchInterval: 30000 });
+  const { data: leaderboardData } = trpc.clicker.getLeaderboard.useQuery(undefined, { refetchInterval: 15000 });
+  const { data: userStatsData } = trpc.clicker.getUserStats.useQuery(undefined, { refetchInterval: 15000 });
   const { data: userRankData } = trpc.clicker.getUserCountryRank.useQuery(undefined, { refetchInterval: 60000 });
   const { data: onlineUsersData } = trpc.clicker.getOnlineUsers.useQuery(undefined, { refetchInterval: 10000 });
 
-  // Mutation
   const submitBatchMutation = trpc.clicker.submitClickBatch.useMutation({
+    onMutate: () => setIsSyncing(true),
     onSuccess: () => {
-      toast.success("Syncing clicks...", { duration: 1000 });
+      setIsSyncing(false);
+      toast.success("Saved to Database!");
     },
-    onError: (err) => {
-      console.error("[DB Sync Error]", err);
-    }
+    onError: () => setIsSyncing(false),
   });
 
   useEffect(() => { if (globalCounterData !== undefined) setGlobalClicks(globalCounterData); }, [globalCounterData]);
@@ -62,20 +62,16 @@ export default function Home() {
     if (countryData) setCountryTotalClicks(countryData.totalClicks);
   }, [leaderboard, userCountry]);
 
-  // DB SYNC LOOP: Checks the buffer every 5 seconds
+  // SYNC LOGIC: Fires every 10 seconds if there are clicks to save
   useEffect(() => {
     const interval = setInterval(() => {
-      setClickBuffer((current) => {
-        if (current > 0) {
-          console.log(`[Database] Saving ${current} clicks...`);
-          submitBatchMutation.mutate({ count: current });
-          return 0;
-        }
-        return current;
-      });
-    }, 5000); 
+      if (clickBuffer > 0) {
+        submitBatchMutation.mutate({ count: clickBuffer });
+        setClickBuffer(0);
+      }
+    }, 10000); 
     return () => clearInterval(interval);
-  }, []);
+  }, [clickBuffer]);
 
   const handleClick = () => {
     setGlobalClicks(prev => prev + 1);
@@ -115,25 +111,25 @@ export default function Home() {
     <div className="min-h-screen bg-[#0a192f] text-white font-sans selection:bg-blue-500/30 overflow-hidden relative">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(23,37,84,1)_0%,rgba(10,25,47,1)_100%)]" />
 
-      {/* Online Counter Overlay */}
+      {/* Online Status */}
       <div className="absolute top-8 left-8 z-20 flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/20">
         <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
         <span className="text-xs font-black tracking-wider text-white uppercase">{onlineUsers} Online</span>
       </div>
 
-      {/* Share Buttons Overlay */}
+      {/* Social Icons */}
       <div className="absolute top-8 right-8 z-20 flex items-center gap-4">
         <button onClick={() => share('twitter')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><Twitter className="w-4 h-4" /></button>
         <button onClick={() => share('reddit')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><RedditIcon /></button>
         <button onClick={() => share('facebook')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><Facebook className="w-4 h-4" /></button>
       </div>
 
-      {/* Leaderboard Sidebar */}
+      {/* Leaderboard */}
       <div className="absolute top-24 left-8 z-20 hidden lg:block w-72">
         <h2 className="text-lg font-black uppercase tracking-[0.3em] text-blue-400 mb-6">Leaderboard</h2>
         <div className="space-y-4">
           {leaderboard.map((country, index) => (
-            <div key={country.countryCode} className="flex items-center gap-3 group">
+            <div key={country.countryCode} className="flex items-center gap-3">
               <span className="text-xs font-mono text-white/40 w-5">{index + 1}</span>
               <span className="text-lg font-bold text-white">{getCountryName(country.countryCode)}</span>
               <span className="text-base font-mono text-blue-400 ml-auto tabular-nums font-black">{country.totalClicks.toLocaleString()}</span>
@@ -142,6 +138,7 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Main UI */}
       <div className="flex flex-col items-center justify-center min-h-screen p-4 relative z-10">
         <div className="mb-12 text-center">
           <span className="text-lg font-black uppercase tracking-[0.5em] text-blue-400 mb-4 block">Global Clicks</span>
@@ -153,7 +150,7 @@ export default function Home() {
         <motion.button 
           whileTap={{ scale: 0.92 }} 
           onClick={handleClick} 
-          className="relative w-72 h-72 md:w-[450px] md:h-[450px] rounded-full flex items-center justify-center transition-all"
+          className="relative w-72 h-72 md:w-[450px] md:h-[450px] rounded-full flex items-center justify-center"
         >
           <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-[60px]" />
           <img 
@@ -188,6 +185,21 @@ export default function Home() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Sync Status Overlay (Bottom Left) */}
+      <div className="absolute bottom-8 left-8 z-20 flex items-center gap-3 text-white/40 text-[10px] font-black uppercase tracking-widest bg-black/20 px-4 py-2 rounded-full border border-white/5">
+        {isSyncing ? (
+          <>
+            <RefreshCw className="w-3 h-3 animate-spin text-blue-400" />
+            <span>Syncing with database...</span>
+          </>
+        ) : (
+          <>
+            <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
+            <span>Clicks save every 10s</span>
+          </>
+        )}
       </div>
     </div>
   );
