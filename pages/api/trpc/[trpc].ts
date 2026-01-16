@@ -1,8 +1,9 @@
 import { createNextApiHandler } from '@trpc/server/adapters/next';
+// We use the direct path to the clicker router
 import { clickerRouter } from '../../../server/routers/clicker';
 import { router } from '../../../server/_core/trpc';
 
-// We define the main router right here to avoid needing an _app.ts file
+// We create the appRouter right here so we don't need a separate _app.ts file
 const appRouter = router({
   clicker: clickerRouter,
 });
@@ -10,10 +11,10 @@ const appRouter = router({
 export default createNextApiHandler({
   router: appRouter,
   createContext: ({ req, res }: any) => ({ req, res }),
-  // Using 'opts: any' to stop the "Binding element implicitly has any type" error
+  // We use 'any' here specifically to stop the "implicitly has an any type" build error
   onError: (opts: any) => {
-    const path = opts.path;
-    const error = opts.error;
-    console.error(`❌ tRPC failed on ${path ?? '<no-path>'}: ${error.message}`);
+    const errorPath = opts.path || 'unknown';
+    const errorMsg = opts.error?.message || 'No message';
+    console.error(`❌ tRPC failed on ${errorPath}: ${errorMsg}`);
   },
 });
