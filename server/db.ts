@@ -3,10 +3,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { pgTable, serial, text, integer, timestamp } from 'drizzle-orm/pg-core';
 import { eq, desc, sql } from 'drizzle-orm';
 
-const client = neon(process.env.DATABASE_URL!);
-export const db = drizzle({ client });
-
-// Table Definitions
+// Table Definitions (Must be defined before the functions)
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   openId: text('open_id').unique(),
@@ -22,7 +19,13 @@ export const globalStats = pgTable('global_stats', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// Initialize Database connection
+const client = neon(process.env.DATABASE_URL!);
+// Fixed: passing client directly and including schema reference
+export const db = drizzle(client, { schema: { users, globalStats } });
+
 function getVisitorInfo(req: any) {
+  // Check common proxy headers for Vercel
   const ip = req?.headers?.['x-forwarded-for']?.split(',')[0] || '127.0.0.1';
   const country = req?.headers?.['x-vercel-ip-country'] || 'UN';
   return { ip, country };
@@ -34,11 +37,11 @@ export async function getGlobalCounter() {
     const result = await db.select().from(globalStats).where(eq(globalStats.id, 1));
     return result[0] || { totalClicks: 0 };
   } catch (e) {
+    console.error("Fetch Global Counter error:", e);
     return { totalClicks: 0 };
   }
 }
 
-// FIX: Added 'amount' parameter to handle the batch from clicker.ts
 export async function incrementAll(req: any, amount: number = 1) {
   const { ip, country } = getVisitorInfo(req);
 
@@ -84,6 +87,7 @@ export async function getCountryLeaderboard() {
     .orderBy(desc(sql`sum(${users.totalClicks})`))
     .limit(10);
   } catch (e) {
+    console.error("Leaderboard error:", e);
     return [];
   }
 }
