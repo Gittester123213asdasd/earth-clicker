@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { pgTable, serial, text, integer, timestamp } from 'drizzle-orm/pg-core';
 import { eq, desc, sql } from 'drizzle-orm';
 
-// Table Definitions - Using explicit string names to match your SQL exactly
+// Match your Neon SQL exactly
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   openId: text('open_id').unique(),
@@ -22,19 +22,11 @@ export const globalStats = pgTable('global_stats', {
 const client = neon(process.env.DATABASE_URL!);
 export const db = drizzle(client, { schema: { users, globalStats } });
 
-// --- SDK COMPATIBILITY FUNCTIONS ---
-
+// --- SDK COMPATIBILITY ---
 export async function getUserByOpenId(openId: string | null) {
-  try {
-    if (!openId) return null;
-    const result = await db.select().from(users).where(eq(users.openId, openId));
-    const user = result[0];
-    if (!user) return null;
-    return { ...user, openId: user.openId || "" };
-  } catch (e) {
-    console.error("Fetch User Error:", e);
-    return null;
-  }
+  if (!openId) return null;
+  const result = await db.select().from(users).where(eq(users.openId, openId));
+  return result[0] ? { ...result[0], openId: result[0].openId || "" } : null;
 }
 
 export async function upsertUser(data: { 
@@ -56,16 +48,13 @@ export async function upsertUser(data: {
     .onConflictDoUpdate({
       target: users.openId,
       set: { 
-        totalClicks: data.totalClicks 
-          ? sql`users.total_clicks + ${data.totalClicks}` 
-          : sql`users.total_clicks`,
+        totalClicks: data.totalClicks ? sql`users.total_clicks + ${data.totalClicks}` : sql`users.total_clicks`,
         updatedAt: new Date() 
       }
     });
 }
 
-// --- MAIN LOGIC ---
-
+// --- MAIN FUNCTIONS ---
 function getVisitorInfo(req: any) {
   const ip = (req?.headers?.['x-forwarded-for'] as string)?.split(',')[0] || '127.0.0.1';
   const country = (req?.headers?.['x-vercel-ip-country'] as string) || 'UN';
@@ -82,18 +71,12 @@ export async function getGlobalCounter() {
 export async function incrementAll(req: any, amount: number = 1) {
   const { ip, country } = getVisitorInfo(req);
   try {
-    // 1. Update Global
     await db.insert(globalStats)
       .values({ id: 1, totalClicks: amount }) 
       .onConflictDoUpdate({
         target: globalStats.id,
-        set: { 
-          totalClicks: sql`global_stats.total_clicks + ${amount}`, 
-          updatedAt: new Date() 
-        }
+        set: { totalClicks: sql`global_stats.total_clicks + ${amount}`, updatedAt: new Date() }
       });
-
-    // 2. Update User
     await upsertUser({ openId: String(ip), country, totalClicks: amount });
     return { success: true };
   } catch (e) {
@@ -104,7 +87,7 @@ export async function incrementAll(req: any, amount: number = 1) {
 
 export async function getCountryLeaderboard() {
   try {
-    const result = await db.select({
+    return await db.select({
       countryCode: users.country,
       totalClicks: sql<number>`CAST(sum(${users.totalClicks}) AS INTEGER)`,
     })
@@ -112,8 +95,6 @@ export async function getCountryLeaderboard() {
     .groupBy(users.country)
     .orderBy(desc(sql`sum(${users.totalClicks})`))
     .limit(10);
-    
-    return result || [];
   } catch (e) { return []; }
 }
 
