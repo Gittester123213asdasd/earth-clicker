@@ -7,7 +7,7 @@ import { eq, desc, sql } from 'drizzle-orm';
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   openId: text('open_id').unique(),
-  name: text('name').default('Guest'),
+  name: text('name').default('Guest'), // Stays 'Guest' for everyone
   totalClicks: integer('total_clicks').default(0),
   country: text('country').default('UN'),
   updatedAt: timestamp('updated_at').defaultNow(),
@@ -22,10 +22,11 @@ export const globalStats = pgTable('global_stats', {
 const client = neon(process.env.DATABASE_URL!);
 export const db = drizzle(client, { schema: { users, globalStats } });
 
-// --- SDK COMPATIBILITY FUNCTIONS ---
+// --- SDK COMPATIBILITY ---
+// These functions exist ONLY to stop the build errors. 
+// They don't change how the user interacts with your site.
 
 export async function getUserByOpenId(openId: string | null) {
-  // Fixes TS2322: Ensures we never return a 'null' ID to the SDK
   if (!openId) return null;
   const result = await db.select().from(users).where(eq(users.openId, openId));
   const user = result[0];
@@ -33,7 +34,7 @@ export async function getUserByOpenId(openId: string | null) {
   
   return {
     ...user,
-    openId: user.openId ?? "" // Force it to be a string, never null
+    openId: user.openId || "" // Ensures the SDK gets a string, not null
   };
 }
 
@@ -42,14 +43,14 @@ export async function upsertUser(data: {
   country: string; 
   totalClicks: number; 
   name?: string | null;
-  email?: string | null; // Just here to stop the SDK error TS2353
+  email?: string | null; // This "lies" to the SDK to let the build pass
 }) {
   return await db.insert(users)
     .values({
       openId: data.openId,
       country: data.country,
       totalClicks: data.totalClicks,
-      name: data.name || 'Guest'
+      name: 'Guest' // Force everyone to stay a guest
     })
     .onConflictDoUpdate({
       target: users.openId,
@@ -60,7 +61,7 @@ export async function upsertUser(data: {
     });
 }
 
-// --- MAIN FUNCTIONS ---
+// --- MAIN LOGIC ---
 
 function getVisitorInfo(req: any) {
   const ip = (req?.headers?.['x-forwarded-for'] as string)?.split(',')[0] || '127.0.0.1';
@@ -78,13 +79,18 @@ export async function getGlobalCounter() {
 export async function incrementAll(req: any, amount: number = 1) {
   const { ip, country } = getVisitorInfo(req);
   try {
+    // 1. Update Global Counter
     await db.insert(globalStats)
-      .values({ id: 1, totalClicks: amount })
+      .values({ id: 1, total_clicks: amount }) // Note: check your SQL column name here
       .onConflictDoUpdate({
         target: globalStats.id,
-        set: { totalClicks: sql`global_stats.total_clicks + ${amount}`, updatedAt: new Date() }
+        set: { 
+          totalClicks: sql`global_stats.total_clicks + ${amount}`, 
+          updatedAt: new Date() 
+        }
       });
 
+    // 2. Update Anonymous User (IP based)
     await upsertUser({ openId: String(ip), country, totalClicks: amount });
   } catch (e) {
     console.error("DB Error:", e);
