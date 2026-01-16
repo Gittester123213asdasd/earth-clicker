@@ -22,16 +22,23 @@ export const globalStats = pgTable('global_stats', {
 const client = neon(process.env.DATABASE_URL!);
 export const db = drizzle(client, { schema: { users, globalStats } });
 
-// --- SDK COMPATIBILITY FUNCTIONS (Fixes your build errors) ---
+// --- SDK COMPATIBILITY FUNCTIONS ---
 
 export async function getUserByOpenId(openId: string) {
+  if (!openId) return null;
   const result = await db.select().from(users).where(eq(users.openId, openId));
   return result[0] || null;
 }
 
-export async function upsertUser(data: { openId: string; country: string; totalClicks: number }) {
+// Added 'name' here because your sdk.ts (line 261) is trying to send it
+export async function upsertUser(data: { openId: string; country: string; totalClicks: number; name?: string }) {
   return await db.insert(users)
-    .values(data)
+    .values({
+      openId: data.openId,
+      country: data.country,
+      totalClicks: data.totalClicks,
+      name: data.name || 'Guest'
+    })
     .onConflictDoUpdate({
       target: users.openId,
       set: { 
@@ -46,7 +53,7 @@ export async function upsertUser(data: { openId: string; country: string; totalC
 function getVisitorInfo(req: any) {
   const ip = req?.headers?.['x-forwarded-for']?.split(',')[0] || '127.0.0.1';
   const country = req?.headers?.['x-vercel-ip-country'] || 'UN';
-  return { ip, country };
+  return { ip: ip as string, country: country as string }; // Force string type for SDK
 }
 
 export async function getGlobalCounter() {
