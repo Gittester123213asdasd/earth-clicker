@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { pgTable, serial, text, integer, timestamp } from 'drizzle-orm/pg-core';
 import { eq, desc, sql } from 'drizzle-orm';
 
-// Match Neon SQL
+// Table Definitions
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   openId: text('open_id').unique(),
