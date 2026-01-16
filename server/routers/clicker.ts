@@ -1,54 +1,41 @@
-import { z } from "zod";
-import { publicProcedure, router } from "../_core/trpc";
-import {
-  getGlobalCounter,
-  getCountryLeaderboard,
-  incrementAll,
-  getOnlineUserCount,
-} from "../db";
+import { z } from 'zod';
+import { publicProcedure, router } from './_core/trpc';
+import * as db from './db';
 
 export const clickerRouter = router({
   getGlobalCounter: publicProcedure.query(async () => {
-    const counter = await getGlobalCounter();
-    return counter?.totalClicks || 0;
+    const stats = await db.getGlobalCounter();
+    return stats.totalClicks;
   }),
 
-  submitClickBatch: publicProcedure
-    .input(z.object({ count: z.number().positive() }))
-    .mutation(async ({ ctx, input }) => {
-      try {
-        await incrementAll(ctx.req, input.count);
-        return { success: true };
-      } catch (error) {
-        console.error("Batch Update Failed:", error);
-        throw new Error("Could not sync clicks");
-      }
-    }),
-
-  getLeaderboard: publicProcedure.query(async ({ ctx }) => {
-    if (ctx.res) {
-      ctx.res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate');
-    }
-    const leaderboard = await getCountryLeaderboard();
-    return leaderboard.map((item: any, index: number) => ({
-      rank: index + 1,
-      countryCode: item.country || "UN",
-      totalClicks: item.totalClicks || 0,
-    }));
-  }),
-
-  // ADD THESE TWO SO HOME.TSX WORKS:
   getUserStats: publicProcedure.query(async ({ ctx }) => {
-     // This just returns basic info for the frontend
-     const country = ctx.req?.headers?.['x-vercel-ip-country'] || 'UN';
-     return { totalClicks: 0, country }; 
+    const { ip, country } = ctx;
+    // You'll need to implement this in db.ts to fetch by IP
+    const user = await db.db.query.users.findFirst({
+        where: (users, { eq }) => eq(users.openId, ip)
+    });
+    return user || { totalClicks: 0, country };
   }),
 
-  getUserCountryRank: publicProcedure.query(async () => {
-     return { rank: 1 }; // Placeholder so the UI doesn't break
+  getLeaderboard: publicProcedure.query(async () => {
+    return await db.getCountryLeaderboard();
+  }),
+
+  getUserCountryRank: publicProcedure.query(async ({ ctx }) => {
+    const { ip } = ctx;
+    // Simplified rank logic
+    return { rank: 1 }; 
   }),
 
   getOnlineUsers: publicProcedure.query(async () => {
-    return await getOnlineUserCount();
+    return await db.getOnlineUserCount();
   }),
+
+  // THIS IS THE CRITICAL MUTATION
+  submitClickBatch: publicProcedure
+    .input(z.object({ count: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await db.incrementAll(ctx.req, input.count);
+      return { success: true };
+    }),
 });
