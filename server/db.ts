@@ -7,7 +7,7 @@ import { eq, desc, sql } from 'drizzle-orm';
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   openId: text('open_id').unique(),
-  name: text('name').default('Guest'), // Stays 'Guest' for everyone
+  name: text('name').default('Guest'),
   totalClicks: integer('total_clicks').default(0),
   country: text('country').default('UN'),
   updatedAt: timestamp('updated_at').defaultNow(),
@@ -22,9 +22,8 @@ export const globalStats = pgTable('global_stats', {
 const client = neon(process.env.DATABASE_URL!);
 export const db = drizzle(client, { schema: { users, globalStats } });
 
-// --- SDK COMPATIBILITY ---
-// These functions exist ONLY to stop the build errors. 
-// They don't change how the user interacts with your site.
+// --- SDK COMPATIBILITY FUNCTIONS ---
+// We add every field the SDK throws at us just to keep the build quiet.
 
 export async function getUserByOpenId(openId: string | null) {
   if (!openId) return null;
@@ -34,7 +33,7 @@ export async function getUserByOpenId(openId: string | null) {
   
   return {
     ...user,
-    openId: user.openId || "" // Ensures the SDK gets a string, not null
+    openId: user.openId || ""
   };
 }
 
@@ -43,14 +42,16 @@ export async function upsertUser(data: {
   country: string; 
   totalClicks: number; 
   name?: string | null;
-  email?: string | null; // This "lies" to the SDK to let the build pass
+  email?: string | null;
+  loginMethod?: string | null; // Added to fix 12:14:29.974 error
+  lastSignedIn?: any;          // Added to fix 12:14:29.974 error
 }) {
   return await db.insert(users)
     .values({
       openId: data.openId,
       country: data.country,
       totalClicks: data.totalClicks,
-      name: 'Guest' // Force everyone to stay a guest
+      name: 'Guest'
     })
     .onConflictDoUpdate({
       target: users.openId,
@@ -79,9 +80,9 @@ export async function getGlobalCounter() {
 export async function incrementAll(req: any, amount: number = 1) {
   const { ip, country } = getVisitorInfo(req);
   try {
-    // 1. Update Global Counter
+    // Fixed: used 'totalClicks' to match the table definition and fix TS2769
     await db.insert(globalStats)
-      .values({ id: 1, total_clicks: amount }) // Note: check your SQL column name here
+      .values({ id: 1, totalClicks: amount }) 
       .onConflictDoUpdate({
         target: globalStats.id,
         set: { 
@@ -90,7 +91,6 @@ export async function incrementAll(req: any, amount: number = 1) {
         }
       });
 
-    // 2. Update Anonymous User (IP based)
     await upsertUser({ openId: String(ip), country, totalClicks: amount });
   } catch (e) {
     console.error("DB Error:", e);
@@ -106,7 +106,7 @@ export async function getCountryLeaderboard() {
     })
     .from(users)
     .groupBy(users.country)
-    .orderBy(desc(sql`sum(${users.totalClicks})`))
+    .orderBy(desc(sql`sum(${users.total_clicks})`))
     .limit(10);
     
     return result || [];
