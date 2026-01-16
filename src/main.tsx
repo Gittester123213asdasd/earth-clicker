@@ -5,7 +5,7 @@ import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 // Change this line to point to Home instead of App
-import Home from "./Home.tsx";  
+import Home from "./pages/Home.tsx";
 import { getLoginUrl } from "./const";
 import "./index.css";
 
