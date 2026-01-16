@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { pgTable, serial, text, integer, timestamp } from 'drizzle-orm/pg-core';
 import { eq, desc, sql } from 'drizzle-orm';
 
-// Match your Neon SQL exactly
+// Match Neon SQL
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   openId: text('open_id').unique(),
@@ -24,9 +24,11 @@ export const db = drizzle(client, { schema: { users, globalStats } });
 
 // --- SDK COMPATIBILITY ---
 export async function getUserByOpenId(openId: string | null) {
-  if (!openId) return null;
-  const result = await db.select().from(users).where(eq(users.openId, openId));
-  return result[0] ? { ...result[0], openId: result[0].openId || "" } : null;
+  try {
+    if (!openId) return null;
+    const result = await db.select().from(users).where(eq(users.openId, openId));
+    return result[0] ? { ...result[0], openId: result[0].openId || "" } : null;
+  } catch (e) { return null; }
 }
 
 export async function upsertUser(data: { 
