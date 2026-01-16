@@ -8,9 +8,7 @@ const getCountryName = (code: string) => {
   try {
     const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
     return regionNames.of(code) || code;
-  } catch (e) {
-    return code;
-  }
+  } catch (e) { return code; }
 };
 
 const RedditIcon = () => (
@@ -30,23 +28,20 @@ export default function Home() {
   const [clickBuffer, setClickBuffer] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Queries
   const { data: globalCounterData } = trpc.clicker.getGlobalCounter.useQuery(undefined, { refetchInterval: 5000 });
   const { data: leaderboardData } = trpc.clicker.getLeaderboard.useQuery(undefined, { refetchInterval: 30000 });
   const { data: userStatsData } = trpc.clicker.getUserStats.useQuery(undefined, { refetchInterval: 30000 });
   const { data: userRankData } = trpc.clicker.getUserCountryRank.useQuery(undefined, { refetchInterval: 60000 });
   const { data: onlineUsersData } = trpc.clicker.getOnlineUsers.useQuery(undefined, { refetchInterval: 10000 });
 
-  // Mutation
   const submitBatchMutation = trpc.clicker.submitClickBatch.useMutation({
     onSuccess: () => {
-      setIsSyncing(false);
+      setTimeout(() => setIsSyncing(false), 2000); // Keep message visible for 2s
       toast.success("Earth Updated!", { duration: 2000 });
     },
-    onError: (err) => {
+    onError: () => {
       setIsSyncing(false);
-      console.error("Sync failed:", err);
-      toast.error("Sync Failed - Check Connection");
+      toast.error("Sync Failed");
     },
   });
 
@@ -66,7 +61,6 @@ export default function Home() {
     if (countryData) setCountryTotalClicks(countryData.totalClicks);
   }, [leaderboard, userCountry]);
 
-  // SYNC LOGIC: 30 Seconds
   useEffect(() => {
     const interval = setInterval(() => {
       if (clickBuffer > 0 && !isSyncing) {
@@ -116,20 +110,17 @@ export default function Home() {
     <div className="min-h-screen bg-[#0a192f] text-white font-sans selection:bg-blue-500/30 overflow-hidden relative">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(23,37,84,1)_0%,rgba(10,25,47,1)_100%)]" />
 
-      {/* Online Counter */}
       <div className="absolute top-8 left-8 z-20 flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/20">
         <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
         <span className="text-xs font-black tracking-wider text-white uppercase">{onlineUsers} Online</span>
       </div>
 
-      {/* Social Buttons */}
       <div className="absolute top-8 right-8 z-20 flex items-center gap-4">
         <button onClick={() => share('twitter')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><Twitter className="w-4 h-4" /></button>
         <button onClick={() => share('reddit')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><RedditIcon /></button>
         <button onClick={() => share('facebook')} className="p-2 bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all hover:scale-110"><Facebook className="w-4 h-4" /></button>
       </div>
 
-      {/* Leaderboard Sidebar */}
       <div className="absolute top-24 left-8 z-20 hidden lg:block w-72">
         <h2 className="text-lg font-black uppercase tracking-[0.3em] text-blue-400 mb-6">Leaderboard</h2>
         <div className="space-y-4">
@@ -191,7 +182,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Sync Status - Bottom Left */}
       <div className="absolute bottom-8 left-8 z-20 flex items-center gap-3 text-white/40 text-[10px] font-black uppercase tracking-widest bg-black/20 px-4 py-2 rounded-full border border-white/5">
         {isSyncing ? (
           <>
