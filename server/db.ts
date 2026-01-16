@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { pgTable, serial, text, integer, timestamp } from 'drizzle-orm/pg-core';
 import { eq, desc, sql } from 'drizzle-orm';
 
-// Table Definitions
+// This matches your Neon table: CREATE TABLE users ...
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   openId: text('open_id').unique(),
@@ -13,6 +13,7 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// This matches your Neon table: CREATE TABLE global_stats ...
 export const globalStats = pgTable('global_stats', {
   id: integer('id').primaryKey(),
   totalClicks: integer('total_clicks').default(0),
@@ -27,7 +28,8 @@ export async function getUserByOpenId(openId: string | null) {
   try {
     if (!openId) return null;
     const result = await db.select().from(users).where(eq(users.openId, openId));
-    return result[0] ? { ...result[0], openId: result[0].openId || "" } : null;
+    const user = result[0];
+    return user ? { ...user, openId: user.openId || "" } : null;
   } catch (e) { return null; }
 }
 
@@ -73,12 +75,14 @@ export async function getGlobalCounter() {
 export async function incrementAll(req: any, amount: number = 1) {
   const { ip, country } = getVisitorInfo(req);
   try {
+    // 1. Update Global
     await db.insert(globalStats)
       .values({ id: 1, totalClicks: amount }) 
       .onConflictDoUpdate({
         target: globalStats.id,
         set: { totalClicks: sql`global_stats.total_clicks + ${amount}`, updatedAt: new Date() }
       });
+    // 2. Update User
     await upsertUser({ openId: String(ip), country, totalClicks: amount });
     return { success: true };
   } catch (e) {
