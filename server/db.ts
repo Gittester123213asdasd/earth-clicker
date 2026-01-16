@@ -25,19 +25,24 @@ export const db = drizzle(client, { schema: { users, globalStats } });
 // --- SDK COMPATIBILITY FUNCTIONS ---
 
 export async function getUserByOpenId(openId: string | null) {
-  // If openId is null, we return null to satisfy sdk.ts(278,7)
+  // Fixes TS2322: Ensures we never return a 'null' ID to the SDK
   if (!openId) return null;
   const result = await db.select().from(users).where(eq(users.openId, openId));
-  return result[0] || null;
+  const user = result[0];
+  if (!user) return null;
+  
+  return {
+    ...user,
+    openId: user.openId ?? "" // Force it to be a string, never null
+  };
 }
 
-// Added 'email' and 'name' as optional to satisfy sdk.ts(262,11)
 export async function upsertUser(data: { 
   openId: string; 
   country: string; 
   totalClicks: number; 
   name?: string | null;
-  email?: string | null;
+  email?: string | null; // Just here to stop the SDK error TS2353
 }) {
   return await db.insert(users)
     .values({
@@ -80,7 +85,6 @@ export async function incrementAll(req: any, amount: number = 1) {
         set: { totalClicks: sql`global_stats.total_clicks + ${amount}`, updatedAt: new Date() }
       });
 
-    // Ensure we pass a string for openId
     await upsertUser({ openId: String(ip), country, totalClicks: amount });
   } catch (e) {
     console.error("DB Error:", e);
