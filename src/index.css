@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
-/* Tell Tailwind to look in these specific folders for styles */
 @source "./**/*.{js,ts,jsx,tsx,html}";
-@source "../../shared/**/*.{js,ts,jsx,tsx}";
+@source "../shared/**/*.{js,ts,jsx,tsx}";
 
-@theme inline {
+@theme {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -53,8 +53,8 @@
   --radius: 0.5rem;
 }
 
-@layer base {
-  body {
-    @apply bg-background text-foreground antialiased;
-  }
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-smoothing: antialiased;
 }
