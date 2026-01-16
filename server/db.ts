@@ -22,6 +22,27 @@ export const globalStats = pgTable('global_stats', {
 const client = neon(process.env.DATABASE_URL!);
 export const db = drizzle(client, { schema: { users, globalStats } });
 
+// --- SDK COMPATIBILITY FUNCTIONS (Fixes your build errors) ---
+
+export async function getUserByOpenId(openId: string) {
+  const result = await db.select().from(users).where(eq(users.openId, openId));
+  return result[0] || null;
+}
+
+export async function upsertUser(data: { openId: string; country: string; totalClicks: number }) {
+  return await db.insert(users)
+    .values(data)
+    .onConflictDoUpdate({
+      target: users.openId,
+      set: { 
+        totalClicks: sql`users.total_clicks + ${data.totalClicks}`,
+        updatedAt: new Date() 
+      }
+    });
+}
+
+// --- MAIN FUNCTIONS ---
+
 function getVisitorInfo(req: any) {
   const ip = req?.headers?.['x-forwarded-for']?.split(',')[0] || '127.0.0.1';
   const country = req?.headers?.['x-vercel-ip-country'] || 'UN';
@@ -32,35 +53,20 @@ export async function getGlobalCounter() {
   try {
     const result = await db.select().from(globalStats).where(eq(globalStats.id, 1));
     return result[0]?.totalClicks || 0;
-  } catch (e) {
-    return 0;
-  }
+  } catch (e) { return 0; }
 }
 
 export async function incrementAll(req: any, amount: number = 1) {
   const { ip, country } = getVisitorInfo(req);
   try {
-    // 1. Update Global Stats
     await db.insert(globalStats)
       .values({ id: 1, totalClicks: amount })
       .onConflictDoUpdate({
         target: globalStats.id,
-        set: { 
-          totalClicks: sql`global_stats.total_clicks + ${amount}`, 
-          updatedAt: new Date() 
-        }
+        set: { totalClicks: sql`global_stats.total_clicks + ${amount}`, updatedAt: new Date() }
       });
 
-    // 2. Update User Stats
-    await db.insert(users)
-      .values({ openId: ip, country: country, totalClicks: amount })
-      .onConflictDoUpdate({
-        target: users.openId,
-        set: { 
-          totalClicks: sql`users.total_clicks + ${amount}`, 
-          updatedAt: new Date() 
-        }
-      });
+    await upsertUser({ openId: ip, country, totalClicks: amount });
   } catch (e) {
     console.error("DB Error:", e);
     throw e;
@@ -77,9 +83,7 @@ export async function getCountryLeaderboard() {
     .groupBy(users.country)
     .orderBy(desc(sql`sum(${users.totalClicks})`))
     .limit(10);
-  } catch (e) {
-    return [];
-  }
+  } catch (e) { return []; }
 }
 
 export async function getOnlineUserCount() { return 1; }
