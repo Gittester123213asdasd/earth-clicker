@@ -23,7 +23,6 @@ const client = neon(process.env.DATABASE_URL!);
 export const db = drizzle(client, { schema: { users, globalStats } });
 
 // --- SDK COMPATIBILITY FUNCTIONS ---
-// We add every field the SDK throws at us just to keep the build quiet.
 
 export async function getUserByOpenId(openId: string | null) {
   if (!openId) return null;
@@ -37,26 +36,29 @@ export async function getUserByOpenId(openId: string | null) {
   };
 }
 
+// We made 'country' and 'totalClicks' optional (?) to stop the SDK from crashing
 export async function upsertUser(data: { 
   openId: string; 
-  country: string; 
-  totalClicks: number; 
+  country?: string; 
+  totalClicks?: number; 
   name?: string | null;
   email?: string | null;
-  loginMethod?: string | null; // Added to fix 12:14:29.974 error
-  lastSignedIn?: any;          // Added to fix 12:14:29.974 error
+  loginMethod?: string | null;
+  lastSignedIn?: any;
 }) {
   return await db.insert(users)
     .values({
       openId: data.openId,
-      country: data.country,
-      totalClicks: data.totalClicks,
+      country: data.country || 'UN',
+      totalClicks: data.totalClicks || 0,
       name: 'Guest'
     })
     .onConflictDoUpdate({
       target: users.openId,
       set: { 
-        totalClicks: sql`users.total_clicks + ${data.totalClicks}`,
+        totalClicks: data.totalClicks 
+          ? sql`users.total_clicks + ${data.totalClicks}` 
+          : sql`users.total_clicks`,
         updatedAt: new Date() 
       }
     });
@@ -80,7 +82,6 @@ export async function getGlobalCounter() {
 export async function incrementAll(req: any, amount: number = 1) {
   const { ip, country } = getVisitorInfo(req);
   try {
-    // Fixed: used 'totalClicks' to match the table definition and fix TS2769
     await db.insert(globalStats)
       .values({ id: 1, totalClicks: amount }) 
       .onConflictDoUpdate({
@@ -106,7 +107,7 @@ export async function getCountryLeaderboard() {
     })
     .from(users)
     .groupBy(users.country)
-    .orderBy(desc(sql`sum(${users.total_clicks})`))
+    .orderBy(desc(sql`sum(${users.totalClicks})`)) // Fixed typo: total_clicks -> totalClicks
     .limit(10);
     
     return result || [];
