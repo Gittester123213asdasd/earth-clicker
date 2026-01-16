@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { pgTable, serial, text, integer, timestamp } from 'drizzle-orm/pg-core';
 import { eq, desc, sql } from 'drizzle-orm';
 
-// Table Definitions
+// Table Definitions - Using explicit string names to match your SQL exactly
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   openId: text('open_id').unique(),
@@ -25,18 +25,18 @@ export const db = drizzle(client, { schema: { users, globalStats } });
 // --- SDK COMPATIBILITY FUNCTIONS ---
 
 export async function getUserByOpenId(openId: string | null) {
-  if (!openId) return null;
-  const result = await db.select().from(users).where(eq(users.openId, openId));
-  const user = result[0];
-  if (!user) return null;
-  
-  return {
-    ...user,
-    openId: user.openId || ""
-  };
+  try {
+    if (!openId) return null;
+    const result = await db.select().from(users).where(eq(users.openId, openId));
+    const user = result[0];
+    if (!user) return null;
+    return { ...user, openId: user.openId || "" };
+  } catch (e) {
+    console.error("Fetch User Error:", e);
+    return null;
+  }
 }
 
-// We made 'country' and 'totalClicks' optional (?) to stop the SDK from crashing
 export async function upsertUser(data: { 
   openId: string; 
   country?: string; 
@@ -82,6 +82,7 @@ export async function getGlobalCounter() {
 export async function incrementAll(req: any, amount: number = 1) {
   const { ip, country } = getVisitorInfo(req);
   try {
+    // 1. Update Global
     await db.insert(globalStats)
       .values({ id: 1, totalClicks: amount }) 
       .onConflictDoUpdate({
@@ -92,9 +93,11 @@ export async function incrementAll(req: any, amount: number = 1) {
         }
       });
 
+    // 2. Update User
     await upsertUser({ openId: String(ip), country, totalClicks: amount });
+    return { success: true };
   } catch (e) {
-    console.error("DB Error:", e);
+    console.error("Increment Error:", e);
     throw e;
   }
 }
@@ -107,7 +110,7 @@ export async function getCountryLeaderboard() {
     })
     .from(users)
     .groupBy(users.country)
-    .orderBy(desc(sql`sum(${users.totalClicks})`)) // Fixed typo: total_clicks -> totalClicks
+    .orderBy(desc(sql`sum(${users.totalClicks})`))
     .limit(10);
     
     return result || [];
