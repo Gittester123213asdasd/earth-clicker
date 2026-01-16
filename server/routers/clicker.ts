@@ -1,19 +1,16 @@
 import { z } from 'zod';
-import { publicProcedure, router } from './_core/trpc';
-import * as db from './db';
+import { publicProcedure, router } from '../_core/trpc'; // Added ../
+import * as db from '../db'; // Added ../
 
 export const clickerRouter = router({
   getGlobalCounter: publicProcedure.query(async () => {
-    const stats = await db.getGlobalCounter();
-    return stats.totalClicks;
+    return await db.getGlobalCounter();
   }),
 
-  getUserStats: publicProcedure.query(async ({ ctx }) => {
-    const { ip, country } = ctx;
-    // You'll need to implement this in db.ts to fetch by IP
-    const user = await db.db.query.users.findFirst({
-        where: (users, { eq }) => eq(users.openId, ip)
-    });
+  getUserStats: publicProcedure.query(async ({ ctx }: any) => {
+    const ip = ctx.req?.headers?.['x-forwarded-for']?.split(',')[0] || '127.0.0.1';
+    const user = await db.getUserByOpenId(ip);
+    const country = ctx.req?.headers?.['x-vercel-ip-country'] || 'UN';
     return user || { totalClicks: 0, country };
   }),
 
@@ -21,9 +18,7 @@ export const clickerRouter = router({
     return await db.getCountryLeaderboard();
   }),
 
-  getUserCountryRank: publicProcedure.query(async ({ ctx }) => {
-    const { ip } = ctx;
-    // Simplified rank logic
+  getUserCountryRank: publicProcedure.query(async () => {
     return { rank: 1 }; 
   }),
 
@@ -31,10 +26,9 @@ export const clickerRouter = router({
     return await db.getOnlineUserCount();
   }),
 
-  // THIS IS THE CRITICAL MUTATION
   submitClickBatch: publicProcedure
     .input(z.object({ count: z.number() }))
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input, ctx }: any) => {
       await db.incrementAll(ctx.req, input.count);
       return { success: true };
     }),
